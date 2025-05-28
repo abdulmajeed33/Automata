@@ -99,9 +99,19 @@ const isValidAlphabetChar = (char) => {
 /**
  * Validate entire string contains only allowed characters using Array.every()
  * Built-in: String.split() + Array.every() - functional approach
- * Handles empty alphabet arrays gracefully
+ * Handles empty alphabet arrays, null values, and '^' as null symbol gracefully
  */
 const validateInput = (str) => {
+    // Handle null/undefined gracefully
+    if (str === null || str === undefined) {
+        return true; // Let matchPattern decide if null is valid based on PATTERN_STAR
+    }
+    
+    // Handle '^' as special null symbol
+    if (str === '^') {
+        return true; // '^' is always valid input (treated as null)
+    }
+    
     // If alphabet is empty, only empty strings are valid
     if (!REGEX_CONFIG.ALPHABET || REGEX_CONFIG.ALPHABET.length === 0) {
         return str.length === 0;
@@ -331,26 +341,52 @@ const matchPatternsRecursively = (str, startPos = 0) => {
 /**
  * Main pattern matching function - entry point
  * Uses: STAR_CONFIG.PATTERN_STAR to determine if whole pattern can repeat
+ * Handles null values and '^' symbol correctly based on star configuration
  */
 const matchPattern = (inputStr) => {
-    // Handle invalid characters first
+    // Handle null/undefined values based on PATTERN_STAR configuration
+    if (inputStr === null || inputStr === undefined) {
+        if (REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR) {
+            return true; // With star: null represents zero patterns (valid)
+        } else {
+            return false; // Without star: need exactly one pattern (null invalid)
+        }
+    }
+    
+    // Handle '^' as special null symbol
+    if (inputStr === '^') {
+        if (REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR) {
+            return true; // With star: '^' represents zero patterns (valid)
+        } else {
+            return false; // Without star: need exactly one pattern ('^' invalid)
+        }
+    }
+    
+    // Handle empty strings based on PATTERN_STAR configuration
+    if (inputStr.length === 0) {
+        if (REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR) {
+            return true; // With star: empty string represents zero patterns (valid)
+        } else {
+            return false; // Without star: need exactly one pattern (empty invalid)
+        }
+    }
+    
+    // Now validate characters (only for non-null, non-empty, non-'^' strings)
     if (!validateInput(inputStr)) return false; // Invalid characters
     
     if (!REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR) {
         // No star: must match exactly one complete pattern (no repetition)
-        // Empty string is NOT valid when no star (need exactly 1 pattern)
-        if (!inputStr || inputStr.length === 0) return false;
         return canMatchSinglePatternExactly(inputStr, 0, inputStr.length);
     }
     
-    // With star: zero or more patterns (empty string valid)
-    if (!inputStr || inputStr.length === 0) return true; // Empty string valid with star
+    // With star: one or more patterns
     return matchPatternsRecursively(inputStr);
 };
 
 /**
  * UI Event Handler with enhanced error handling
  * Uses modern DOM methods and clean error handling
+ * Handles empty/null inputs and '^' null symbol based on PATTERN_STAR configuration
  */
 const checkString = () => {
     const input = document.getElementById('testString');
@@ -360,15 +396,33 @@ const checkString = () => {
     // Clear previous styling using classList methods
     result.className = 'result-message';
     
-    // Input validation with specific error messages
+    // Handle '^' as special null symbol
+    if (testString === '^') {
+        if (REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR) {
+            // With star: '^' represents null/zero patterns (valid)
+            displayResult(result, 'Null symbol "^" is valid (zero patterns) ✓', 'valid');
+        } else {
+            // Without star: '^' is invalid (need exactly one pattern)
+            displayResult(result, 'Null symbol "^" is invalid (need exactly one pattern) ✗', 'invalid');
+        }
+        return;
+    }
+    
+    // Handle empty input based on PATTERN_STAR configuration
     if (!testString) {
-        displayResult(result, 'Please enter a string to test', 'empty');
+        if (REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR) {
+            // With star: empty input is valid (represents zero patterns)
+            displayResult(result, 'Empty string is valid (zero patterns) ✓', 'valid');
+        } else {
+            // Without star: empty input is invalid (need exactly one pattern)
+            displayResult(result, 'Empty string is invalid (need exactly one pattern) ✗', 'invalid');
+        }
         return;
     }
     
     if (!validateInput(testString)) {
         const allowedChars = REGEX_CONFIG.ALPHABET.join("', '");
-        displayResult(result, `Invalid input! Only '${allowedChars}' characters allowed`, 'invalid');
+        displayResult(result, `Invalid input! Only '${allowedChars}' characters allowed (or '^' for null)`, 'invalid');
         return;
     }
     
@@ -768,3 +822,69 @@ starConfigurations.forEach((config, index) => {
 console.log('\n✅ Restoring original STAR_CONFIG...');
 REGEX_CONFIG.STAR_CONFIG = originalStarConfig;
 console.log('✅ STAR_CONFIG testing complete!\n');
+
+// Test null and empty value handling with PATTERN_STAR
+console.log('\n🔧 Testing NULL and EMPTY value handling:');
+
+// Store original configuration
+const originalPatternStarForNull = REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR;
+
+console.log('\n1️⃣ Testing with PATTERN_STAR = true:');
+REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR = true;
+console.log('  null value:', matchPattern(null));
+console.log('  undefined value:', matchPattern(undefined));
+console.log('  empty string "":', matchPattern(""));
+console.log('  empty after trim "  ":', matchPattern("  ".trim()));
+
+console.log('\n2️⃣ Testing with PATTERN_STAR = false:');
+REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR = false;
+console.log('  null value:', matchPattern(null));
+console.log('  undefined value:', matchPattern(undefined));
+console.log('  empty string "":', matchPattern(""));
+console.log('  empty after trim "  ":', matchPattern("  ".trim()));
+
+// Restore original configuration
+REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR = originalPatternStarForNull;
+console.log('\n✅ PATTERN_STAR restored to:', REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR);
+
+console.log('\n📝 Summary:');
+console.log('  - PATTERN_STAR=true: null/empty are VALID (zero patterns allowed)');
+console.log('  - PATTERN_STAR=false: null/empty are INVALID (exactly one pattern required)');
+console.log('  - This matches regex behavior: [pattern]* vs pattern\n');
+
+// Test '^' null symbol handling with PATTERN_STAR
+console.log('\n🔧 Testing "^" NULL SYMBOL handling:');
+
+// Store original configuration
+const originalPatternStarForCaret = REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR;
+
+console.log('\n1️⃣ Testing with PATTERN_STAR = true:');
+REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR = true;
+console.log('  "^" symbol:', matchPattern("^"));
+console.log('  null value:', matchPattern(null));
+console.log('  undefined value:', matchPattern(undefined));
+console.log('  empty string "":', matchPattern(""));
+
+console.log('\n2️⃣ Testing with PATTERN_STAR = false:');
+REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR = false;
+console.log('  "^" symbol:', matchPattern("^"));
+console.log('  null value:', matchPattern(null));
+console.log('  undefined value:', matchPattern(undefined));
+console.log('  empty string "":', matchPattern(""));
+
+// Test validation of '^' symbol
+console.log('\n3️⃣ Testing "^" validation:');
+console.log('  validateInput("^"):', validateInput("^"));
+console.log('  validateInput("a^"):', validateInput("a^"));
+console.log('  validateInput("^a"):', validateInput("^a"));
+
+// Restore original configuration
+REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR = originalPatternStarForCaret;
+console.log('\n✅ PATTERN_STAR restored to:', REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR);
+
+console.log('\n📝 Summary:');
+console.log('  - "^" symbol represents NULL/ZERO patterns');
+console.log('  - PATTERN_STAR=true: "^" is VALID (zero patterns allowed)');
+console.log('  - PATTERN_STAR=false: "^" is INVALID (exactly one pattern required)');
+console.log('  - "^" is always valid input (bypasses alphabet validation)');
+console.log('  - You can now easily test null behavior by typing "^" in the UI!\n');
