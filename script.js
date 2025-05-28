@@ -1,253 +1,496 @@
-// Regular Expression: [(a+b)*aa(b+ab)(aa+bb)*]*
-// This means: zero or more repetitions of the pattern (a+b)*aa(b+ab)(aa+bb)*
+/**
+ * ===================================================================
+ * REGULAR EXPRESSION CHECKER: [(a+b)*aa(b+ab)(aa+bb)*]*
+ * ===================================================================
+ * 
+ * EASY MODIFICATION GUIDE:
+ * 1. Change REGEX_CONFIG object to modify the pattern
+ * 2. Modify pattern functions in PATTERN_MATCHERS section
+ * 3. Update validateInput() for different alphabet
+ * 
+ * Current Pattern Breakdown:
+ * - Outer: [INNER_PATTERN]*  (zero or more repetitions)
+ * - Inner: (a+b)*aa(b+ab)(aa+bb)*
+ *   ├─ (a+b)*: any sequence of 'a' and 'b' (zero or more)
+ *   ├─ aa: exactly "aa"
+ *   ├─ (b+ab): either "b" OR "ab"
+ *   └─ (aa+bb)*: zero or more "aa" or "bb" pairs
+ */
 
-// ===========================================
-// EASILY MODIFIABLE REGEX PATTERN FUNCTIONS
-// ===========================================
-// To change the regex, modify these functions:
+// ===================================================================
+// CONFIGURATION - EASY TO MODIFY FOR DIFFERENT REGEX PATTERNS
+// ===================================================================
 
-// Pattern part 1: (a+b)* - any sequence of 'a' and 'b'
-// Modified to try different lengths (backtracking approach)
-function isValidABChar(char) {
-    return char === 'a' || char === 'b';
-}
-
-// Check if a substring from start to end contains only 'a' and 'b'
-function isValidABSequence(str, start, length) {
-    for (let i = 0; i < length; i++) {
-        if (start + i >= str.length || !isValidABChar(str[start + i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// Pattern part 2: aa - exactly "aa"
-function matchExactAA(str, pos) {
-    if (pos + 1 < str.length && str[pos] === 'a' && str[pos + 1] === 'a') {
-        return pos + 2;
-    } else {
-        return -1; // Failed to match
-    }
-}
-
-// Pattern part 3: (b+ab) - either "b" or "ab"
-function matchBOrAB(str, pos) {
-    if (pos < str.length) {
-        if (str[pos] === 'b') {
-            return pos + 1; // Matched "b"
-        } else if (pos + 1 < str.length && str[pos] === 'a' && str[pos + 1] === 'b') {
-            return pos + 2; // Matched "ab"
-        }
-    }
-    return -1; // Failed to match
-}
-
-// Pattern part 4: (aa+bb)* - zero or more "aa" or "bb"
-function matchOptionalAABB(str, pos) {
-    while (pos + 1 < str.length) {
-        if (str[pos] === 'a' && str[pos + 1] === 'a') {
-            pos += 2; // Matched "aa"
-        } else if (str[pos] === 'b' && str[pos + 1] === 'b') {
-            pos += 2; // Matched "bb"
-        } else {
-            break; // No more matches
-        }
-    }
-    return pos;
-}
-
-// Complete inner pattern with backtracking: (a+b)*aa(b+ab)(aa+bb)*
-function matchSinglePattern(str, pos) {
-    // Try different lengths for (a+b)* part - from 0 to remaining length
-    let maxPossibleAB = str.length - pos - 3; // Need at least 3 chars for "aa" + ("b" or "ab")
-    if (maxPossibleAB < 0) maxPossibleAB = 0;
+const REGEX_CONFIG = {
+    // Alphabet for (a+b)* part
+    ALPHABET: ['a', 'b'],
     
-    // Try each possible length for (a+b)* part
-    for (let abLength = 0; abLength <= maxPossibleAB; abLength++) {
-        // Check if this length gives us a valid (a+b)* sequence
-        if (isValidABSequence(str, pos, abLength)) {
-            let currentPos = pos + abLength;
-            
-            // Step 2: Try to match "aa"
-            let afterAA = matchExactAA(str, currentPos);
-            if (afterAA !== -1) {
-                // Step 3: Try to match (b+ab)
-                let afterBOrAB = matchBOrAB(str, afterAA);
-                if (afterBOrAB !== -1) {
-                    // Step 4: Try to match (aa+bb)* - try all possible end positions
-                    let maxRemainingForAABB = str.length - afterBOrAB;
-                    
-                    // Try all possible lengths for (aa+bb)*, starting from 0
-                    for (let targetEnd = afterBOrAB; targetEnd <= str.length; targetEnd++) {
-                        if (canMatchAABBStar(str, afterBOrAB, targetEnd)) {
-                            return targetEnd; // Return first valid match (shortest)
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Required exact sequences (array for flexibility)
+    REQUIRED_SEQUENCE: ['aa'],
     
-    return -1; // Failed to find any valid combination
-}
+    // Alternative options for (b+ab) part
+    ALTERNATIVE_OPTIONS: ['b', 'ab'],
+    
+    // Repeatable sequences for (aa+bb)* part (can be any length)
+    REPEATABLE_SEQUENCES: ['aa', 'bb'],
+    
+    // Minimum pattern length (shortest required + shortest alternative)
+    MIN_PATTERN_LENGTH: 3
+};
 
-// Helper function to check if a substring can be matched by (aa+bb)*
-function canMatchAABBStar(str, start, end) {
+// ===================================================================
+// UTILITY FUNCTIONS - Using JavaScript Built-in Methods
+// ===================================================================
+
+/**
+ * Check if character is in allowed alphabet using Array.includes()
+ * Built-in: Array.includes() - cleaner than manual loop
+ */
+const isValidAlphabetChar = (char) => {
+    return REGEX_CONFIG.ALPHABET.includes(char);
+};
+
+/**
+ * Validate entire string contains only allowed characters using Array.every()
+ * Built-in: String.split() + Array.every() - functional approach
+ */
+const validateInput = (str) => {
+    return str.split('').every(char => isValidAlphabetChar(char));
+};
+
+/**
+ * Get substring using String.substring() - built-in method
+ * More readable than manual character extraction
+ */
+const getSubstring = (str, start, end) => {
+    return str.substring(start, end);
+};
+
+/**
+ * Check if substring matches any option using Array.some()
+ * Built-in: Array.some() - checks if at least one element satisfies condition
+ */
+const matchesAnyOption = (str, pos, options) => {
+    return options.some(option => {
+        const substring = getSubstring(str, pos, pos + option.length);
+        return substring === option;
+    });
+};
+
+// ===================================================================
+// PATTERN MATCHERS - Modular Functions for Each Regex Component
+// ===================================================================
+
+/**
+ * PATTERN PART 1: (a+b)* - Zero or more alphabet characters
+ * Uses: String.substring() + Array.every() for validation
+ */
+const canMatchAlphabetStar = (str, start, length) => {
+    if (length === 0) return true; // Zero repetitions allowed
+    
+    const substring = getSubstring(str, start, start + length);
+    // Using Array.every() to check all characters are valid
+    return substring.split('').every(char => isValidAlphabetChar(char));
+};
+
+/**
+ * PATTERN PART 2: aa - Exact required sequence(s)
+ * Uses: Array.find() to match any of the required sequences (sorted by length, longest first)
+ */
+const canMatchRequiredSequence = (str, pos) => {
+    // Sort required sequences by length (longest first) to ensure greedy matching
+    const sortedRequired = [...REGEX_CONFIG.REQUIRED_SEQUENCE].sort((a, b) => b.length - a.length);
+    
+    // Using Array.find() - returns first sequence that matches (now longest first)
+    const matchedSequence = sortedRequired.find(sequence => {
+        const substring = getSubstring(str, pos, pos + sequence.length);
+        return substring === sequence;
+    });
+    
+    return matchedSequence ? pos + matchedSequence.length : -1;
+};
+
+/**
+ * PATTERN PART 3: (b+ab) - One of the alternative options
+ * Uses: Array.find() to get first matching option (sorted by length, longest first)
+ */
+const canMatchAlternatives = (str, pos) => {
+    // Sort alternatives by length (longest first) to ensure greedy matching
+    const sortedAlternatives = [...REGEX_CONFIG.ALTERNATIVE_OPTIONS].sort((a, b) => b.length - a.length);
+    
+    // Using Array.find() - returns first option that matches (now longest first)
+    const matchedOption = sortedAlternatives.find(option => {
+        const substring = getSubstring(str, pos, pos + option.length);
+        return substring === option;
+    });
+    
+    return matchedOption ? pos + matchedOption.length : -1;
+};
+
+/**
+ * PATTERN PART 4: (aa+bb)* - Zero or more repeatable sequences
+ * Uses: while loop with longest-first matching for any length sequences
+ */
+const canMatchRepeatableSequences = (str, start, end) => {
     let pos = start;
+    
+    // Sort sequences by length (longest first) to ensure greedy matching
+    const sortedSequences = [...REGEX_CONFIG.REPEATABLE_SEQUENCES].sort((a, b) => b.length - a.length);
     
     while (pos < end) {
-        if (pos + 1 < end) {
-            if ((str[pos] === 'a' && str[pos + 1] === 'a') ||
-                (str[pos] === 'b' && str[pos + 1] === 'b')) {
-                pos += 2; // Matched "aa" or "bb"
-            } else {
-                return false; // Can't match this pair
-            }
+        // Find the first (longest) sequence that matches at current position
+        const matchedSequence = sortedSequences.find(sequence => {
+            if (pos + sequence.length > end) return false; // Not enough characters
+            const substring = getSubstring(str, pos, pos + sequence.length);
+            return substring === sequence;
+        });
+        
+        if (matchedSequence) {
+            pos += matchedSequence.length;
         } else {
-            return false; // Odd number of characters left, can't match
+            return false; // No sequence matches at this position
         }
     }
     
-    return true; // Successfully matched all characters
-}
+    return true; // All characters successfully matched
+};
 
-// Full pattern: [(a+b)*aa(b+ab)(aa+bb)*]*
-// This means zero or more repetitions of the single pattern
-function matchFullPattern(str) {
-    return matchFullPatternHelper(str, 0);
-}
+// ===================================================================
+// CORE PATTERN MATCHING LOGIC
+// ===================================================================
 
-// Helper function with backtracking to try all possible pattern splits
-function matchFullPatternHelper(str, pos) {
-    // Handle empty string or reached end (zero repetitions)
-    if (pos >= str.length) {
-        return true;
-    }
+/**
+ * Check if a specific substring can match exactly one complete pattern
+ * Uses functional approach with clear step-by-step validation
+ */
+const canMatchSinglePatternExactly = (str, start, end) => {
+    const patternLength = end - start;
+    const minLength = REGEX_CONFIG.MIN_PATTERN_LENGTH;
     
-    // Try to match patterns of different lengths starting from pos
-    for (let endPos = pos + 3; endPos <= str.length; endPos++) {
-        // Try to match a single pattern from pos to endPos
-        if (canMatchSinglePatternExactly(str, pos, endPos)) {
-            // If this pattern matches, recursively try to match the rest
-            if (matchFullPatternHelper(str, endPos)) {
-                return true; // Found a complete solution
-            }
-        }
-    }
+    if (patternLength < minLength) return false;
     
-    return false; // No valid pattern found
-}
-
-// Check if substring from start to end can be matched by exactly one pattern
-function canMatchSinglePatternExactly(str, start, end) {
-    let pos = start;
-    let maxPossibleAB = end - start - 3; // Need at least 3 chars for "aa" + ("b" or "ab")
-    if (maxPossibleAB < 0) return false;
+    const maxAlphabetLength = patternLength - minLength;
     
-    // Try each possible length for (a+b)* part
-    for (let abLength = 0; abLength <= maxPossibleAB; abLength++) {
-        // Check if this length gives us a valid (a+b)* sequence
-        if (isValidABSequence(str, pos, abLength)) {
-            let currentPos = pos + abLength;
-            
-            // Step 2: Try to match "aa"
-            let afterAA = matchExactAA(str, currentPos);
-            if (afterAA !== -1) {
-                // Step 3: Try to match (b+ab)
-                let afterBOrAB = matchBOrAB(str, afterAA);
-                if (afterBOrAB !== -1) {
-                    // Step 4: Check if remaining chars can be matched by (aa+bb)*
-                    if (canMatchAABBStar(str, afterBOrAB, end)) {
-                        return true; // Found exact match
-                    }
-                }
-            }
-        }
-    }
+    // Try different lengths for (a+b)* part using Array.from() for range
+    const alphabetLengths = Array.from({length: maxAlphabetLength + 1}, (_, i) => i);
     
-    return false; // No valid combination found
-}
-
-// ===========================================
-// INPUT VALIDATION AND MAIN LOGIC
-// ===========================================
-
-function isValidInput(str) {
-    // Check if string contains only 'a' and 'b'
-    for (let i = 0; i < str.length; i++) {
-        if (str[i] !== 'a' && str[i] !== 'b') {
+    return alphabetLengths.some(alphabetLength => {
+        let currentPos = start;
+        
+        // Step 1: Try (a+b)* with current length
+        if (!canMatchAlphabetStar(str, currentPos, alphabetLength)) {
             return false;
         }
-    }
-    return true;
-}
+        currentPos += alphabetLength;
+        
+        // Step 2: Try required sequence (aa)
+        const requiredPart = str.substring(currentPos, currentPos + Math.max(...REGEX_CONFIG.REQUIRED_SEQUENCE.map(seq => seq.length)));
+        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(REGEX_CONFIG.REQUIRED_SEQUENCE)}: checking from "${str.substring(currentPos)}"`);
+        const afterRequired = canMatchRequiredSequence(str, currentPos);
+        if (afterRequired === -1) {
+            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequence found`);
+            return false;
+        }
+        const requiredMatched = str.substring(currentPos, afterRequired);
+        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Matched required sequence: "${requiredMatched}"`);
+        currentPos = afterRequired;
+        
+        // Step 3: Try alternatives (b+ab)
+        const afterAlternatives = canMatchAlternatives(str, currentPos);
+        if (afterAlternatives === -1) return false;
+        currentPos = afterAlternatives;
+        
+        // Step 4: Check if remaining can be matched by repeatable sequences
+        return canMatchRepeatableSequences(str, currentPos, end);
+    });
+};
 
-function checkString() {
+/**
+ * Main recursive function with backtracking
+ * Uses clean recursive approach for pattern matching
+ */
+const matchPatternsRecursively = (str, startPos = 0) => {
+    // Base case: reached end of string
+    if (startPos >= str.length) return true;
+    
+    const minPatternLength = REGEX_CONFIG.MIN_PATTERN_LENGTH;
+    const possibleEndPositions = Array.from(
+        {length: str.length - startPos - minPatternLength + 1}, 
+        (_, i) => startPos + minPatternLength + i
+    );
+    
+    // Try each possible pattern length using Array.some()
+    return possibleEndPositions.some(endPos => {
+        // If current pattern matches, try to match the rest recursively
+        return canMatchSinglePatternExactly(str, startPos, endPos) && 
+               matchPatternsRecursively(str, endPos);
+    });
+};
+
+// ===================================================================
+// MAIN INTERFACE FUNCTIONS
+// ===================================================================
+
+/**
+ * Main pattern matching function - entry point
+ * Uses input validation + recursive matching
+ */
+const matchPattern = (inputStr) => {
+    // Handle edge cases using logical operators
+    if (!inputStr || inputStr.length === 0) return true; // Empty string valid
+    if (!validateInput(inputStr)) return false; // Invalid characters
+    
+    return matchPatternsRecursively(inputStr);
+};
+
+/**
+ * UI Event Handler with enhanced error handling
+ * Uses modern DOM methods and clean error handling
+ */
+const checkString = () => {
     const input = document.getElementById('testString');
     const result = document.getElementById('result');
     const testString = input.value.trim();
     
-    // Clear previous styling
+    // Clear previous styling using classList methods
     result.className = 'result-message';
     
-    if (testString === '') {
-        result.textContent = 'Please enter a string to test';
-        result.classList.add('empty');
+    // Input validation with specific error messages
+    if (!testString) {
+        displayResult(result, 'Please enter a string to test', 'empty');
         return;
     }
     
-    // Validate input characters
-    if (!isValidInput(testString)) {
-        result.textContent = 'Invalid string - Only \'a\' and \'b\' characters allowed';
-        result.classList.add('invalid');
+    if (!validateInput(testString)) {
+        const allowedChars = REGEX_CONFIG.ALPHABET.join("', '");
+        displayResult(result, `Invalid input! Only '${allowedChars}' characters allowed`, 'invalid');
         return;
     }
     
-    // Check if string matches the pattern
-    if (matchFullPattern(testString)) {
-        result.textContent = 'Valid string';
-        result.classList.add('valid');
-    } else {
-        result.textContent = 'Invalid string';
-        result.classList.add('invalid');
-    }
-}
+    // Pattern matching with clear success/failure messages
+    const isValid = matchPattern(testString);
+    const message = isValid ? 'Valid string ✓' : 'Invalid string ✗';
+    const className = isValid ? 'valid' : 'invalid';
+    
+    displayResult(result, message, className);
+};
 
-// Allow Enter key to trigger check
-document.addEventListener('DOMContentLoaded', function() {
+/**
+ * Helper function to display results with consistent styling
+ * Uses template literals and classList for clean DOM manipulation
+ */
+const displayResult = (element, message, className) => {
+    element.textContent = message;
+    element.classList.add(className);
+};
+
+// ===================================================================
+// EVENT LISTENERS - Modern JavaScript Event Handling
+// ===================================================================
+
+/**
+ * Initialize event listeners when DOM is ready
+ * Uses modern event handling with arrow functions
+ */
+document.addEventListener('DOMContentLoaded', () => {
     const input = document.getElementById('testString');
-    input.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
+    
+    // Enter key support using modern event handling
+    input.addEventListener('keypress', (event) => {
+        if (event.key === 'Enter') {
             checkString();
         }
     });
+    
+    // Optional: Add real-time validation feedback
+    input.addEventListener('input', () => {
+        const value = input.value;
+        const isValid = validateInput(value);
+        
+        // Use classList.toggle() for dynamic styling
+        input.classList.toggle('invalid-input', value && !isValid);
+    });
 });
 
-// ===========================================
-// DEBUGGING HELPER (FOR DEVELOPMENT/TESTING)
-// ===========================================
-// Uncomment the following function to test various strings automatically
+// ===================================================================
+// DEBUGGING AND TESTING UTILITIES
+// ===================================================================
 
-/*
-function runTests() {
+/**
+ * Debug function to trace pattern matching step by step
+ */
+const debugPatternMatch = (inputStr) => {
+    console.log(`🔍 Debugging: "${inputStr}"`);
+    console.log('Configuration:', REGEX_CONFIG);
+    
+    if (!inputStr || inputStr.length === 0) {
+        console.log('✅ Empty string - Valid');
+        return true;
+    }
+    
+    if (!validateInput(inputStr)) {
+        console.log('❌ Invalid characters');
+        return false;
+    }
+    
+    console.log('📍 Starting recursive matching...');
+    return debugMatchPatternsRecursively(inputStr, 0, 1);
+};
+
+const debugMatchPatternsRecursively = (str, startPos, depth) => {
+    const indent = '  '.repeat(depth);
+    console.log(`${indent}🎯 Trying patterns from position ${startPos}`);
+    
+    if (startPos >= str.length) {
+        console.log(`${indent}✅ Reached end of string - Success!`);
+        return true;
+    }
+    
+    const minPatternLength = REGEX_CONFIG.MIN_PATTERN_LENGTH;
+    const possibleEndPositions = Array.from(
+        {length: str.length - startPos - minPatternLength + 1}, 
+        (_, i) => startPos + minPatternLength + i
+    );
+    
+    console.log(`${indent}📋 Possible end positions:`, possibleEndPositions);
+    
+    for (const endPos of possibleEndPositions) {
+        const substring = str.substring(startPos, endPos);
+        console.log(`${indent}🔄 Trying pattern "${substring}" (${startPos}-${endPos})`);
+        
+        if (debugCanMatchSinglePatternExactly(str, startPos, endPos, depth + 1)) {
+            console.log(`${indent}✅ Pattern "${substring}" matched! Continuing...`);
+            if (debugMatchPatternsRecursively(str, endPos, depth + 1)) {
+                return true;
+            }
+            console.log(`${indent}❌ Rest of string failed, backtracking...`);
+        } else {
+            console.log(`${indent}❌ Pattern "${substring}" failed`);
+        }
+    }
+    
+    console.log(`${indent}❌ No valid patterns found from position ${startPos}`);
+    return false;
+};
+
+const debugCanMatchSinglePatternExactly = (str, start, end, depth) => {
+    const indent = '  '.repeat(depth);
+    const patternLength = end - start;
+    const minLength = REGEX_CONFIG.MIN_PATTERN_LENGTH;
+    const substring = str.substring(start, end);
+    
+    console.log(`${indent}🧩 Analyzing pattern "${substring}"`);
+    
+    if (patternLength < minLength) {
+        console.log(`${indent}❌ Too short (${patternLength} < ${minLength})`);
+        return false;
+    }
+    
+    const maxAlphabetLength = patternLength - minLength;
+    console.log(`${indent}📏 Max alphabet length: ${maxAlphabetLength}`);
+    
+    for (let alphabetLength = 0; alphabetLength <= maxAlphabetLength; alphabetLength++) {
+        console.log(`${indent}🔄 Trying alphabet length: ${alphabetLength}`);
+        let currentPos = start;
+        
+        // Step 1: (a+b)*
+        const alphabetPart = str.substring(currentPos, currentPos + alphabetLength);
+        console.log(`${indent}  1️⃣ (a+b)*: "${alphabetPart}"`);
+        if (!canMatchAlphabetStar(str, currentPos, alphabetLength)) {
+            console.log(`${indent}     ❌ Invalid alphabet sequence`);
+            continue;
+        }
+        console.log(`${indent}     ✅ Valid alphabet sequence`);
+        currentPos += alphabetLength;
+        
+        // Step 2: Required sequence
+        const requiredPart = str.substring(currentPos, currentPos + Math.max(...REGEX_CONFIG.REQUIRED_SEQUENCE.map(seq => seq.length)));
+        console.log(`${indent}  2️⃣ Required sequences ${JSON.stringify(REGEX_CONFIG.REQUIRED_SEQUENCE)}: checking from "${str.substring(currentPos)}"`);
+        const afterRequired = canMatchRequiredSequence(str, currentPos);
+        if (afterRequired === -1) {
+            console.log(`${indent}     ❌ No required sequence found`);
+            continue;
+        }
+        const requiredMatched = str.substring(currentPos, afterRequired);
+        console.log(`${indent}     ✅ Matched required sequence: "${requiredMatched}"`);
+        currentPos = afterRequired;
+        
+        // Step 3: Alternatives
+        const remainingForAlt = str.substring(currentPos);
+        console.log(`${indent}  3️⃣ Alternatives from "${remainingForAlt}"`);
+        const afterAlternatives = canMatchAlternatives(str, currentPos);
+        if (afterAlternatives === -1) {
+            console.log(`${indent}     ❌ No alternative matched`);
+            continue;
+        }
+        const altMatched = str.substring(currentPos, afterAlternatives);
+        console.log(`${indent}     ✅ Matched alternative: "${altMatched}"`);
+        currentPos = afterAlternatives;
+        
+        // Step 4: Repeatable sequences
+        const remainingForSequences = str.substring(currentPos, end);
+        console.log(`${indent}  4️⃣ Repeatable sequences: "${remainingForSequences}"`);
+        if (canMatchRepeatableSequences(str, currentPos, end)) {
+            console.log(`${indent}     ✅ All parts matched!`);
+            return true;
+        } else {
+            console.log(`${indent}     ❌ Repeatable sequences failed`);
+        }
+    }
+    
+    return false;
+};
+
+/**
+ * Test suite for debugging - uncomment to use
+ * Uses modern array methods and template literals
+ */
+const runTestSuite = () => {
     const testCases = [
-        { input: "", expected: true },      // Empty string (zero repetitions)
-        { input: "aab", expected: true },   // (a+b)*="", aa="aa", (b+ab)="b"
-        { input: "aaab", expected: true },  // (a+b)*="", aa="aa", (b+ab)="ab"  
-        { input: "baab", expected: true },  // (a+b)*="b", aa="aa", (b+ab)="b"
-        { input: "aabaab", expected: true }, // Two patterns: "aab" + "aab"
-        { input: "baabaabb", expected: true }, // Two patterns with (aa+bb)*
-        { input: "ab", expected: false },   // Should fail because no "aa"
-        { input: "aa", expected: false },   // Should fail because no (b+ab)
-        { input: "abb", expected: false },  // Should fail because no "aa" (after trying all combinations)
+        // Basic valid cases
+        { input: "", expected: true, description: "Empty string (zero repetitions)" },
+        { input: "aab", expected: true, description: "Single pattern: '' + 'aa' + 'b' + ''" },
+        { input: "aaab", expected: true, description: "Single pattern: '' + 'aa' + 'ab' + ''" },
+        { input: "baab", expected: true, description: "Single pattern: 'b' + 'aa' + 'b' + ''" },
+        
+        // Test cases with NEW 'ba' alternative
+        { input: "aaba", expected: true, description: "Single pattern: '' + 'aa' + 'ba' + ''" },
+        { input: "baaba", expected: true, description: "Single pattern: 'b' + 'aa' + 'ba' + ''" },
+        { input: "aabaaa", expected: true, description: "Single pattern: '' + 'aa' + 'ba' + 'aa'" },
+        
+        // Complex valid cases
+        { input: "aabaab", expected: true, description: "Two patterns: 'aab' + 'aab'" },
+        { input: "aabaabb", expected: true, description: "Single pattern with (aa+bb)*" },
+        { input: "aabaabbaabb", expected: true, description: "Multiple patterns with pairs" },
+        
+        // Invalid cases (correctly invalid)
+        { input: "ab", expected: false, description: "Missing required 'aa'" },
+        { input: "aa", expected: false, description: "Missing required (b+ab+ba)" },
+        { input: "abb", expected: false, description: "No valid 'aa' after any split" },
+        { input: "aba", expected: false, description: "No 'aa' sequence anywhere in string" },
+        { input: "bab", expected: false, description: "No 'aa' sequence anywhere in string" }
     ];
     
-    console.log("Running tests:");
+    console.log('🧪 Running Test Suite...\n');
+    
     testCases.forEach((test, index) => {
-        const result = matchFullPattern(test.input);
-        const status = result === test.expected ? "PASS" : "FAIL";
-        console.log(`Test ${index + 1}: "${test.input}" -> ${result} (expected ${test.expected}) [${status}]`);
+        const result = matchPattern(test.input);
+        const status = result === test.expected ? '✅ PASS' : '❌ FAIL';
+        const inputDisplay = test.input || '(empty)';
+        
+        console.log(`Test ${index + 1}: "${inputDisplay}" → ${result} ${status}`);
+        console.log(`   Description: ${test.description}\n`);
     });
-}
-*/ 
+};
+
+// Debug specific string - uncomment to debug "aaba"
+debugPatternMatch("aaba");
+
+// Quick test alternatives
+console.log('🔍 Testing alternatives:');
+console.log('Position 2 in "aaba":', '"aaba".substring(2, 4) =', "aaba".substring(2, 4));
+console.log('Does "ba" match alternatives?', REGEX_CONFIG.ALTERNATIVE_OPTIONS.includes("ba"));
+console.log('All alternatives:', REGEX_CONFIG.ALTERNATIVE_OPTIONS);
+
+// Uncomment the line below to run tests automatically
+// runTestSuite();
