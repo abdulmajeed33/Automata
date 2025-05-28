@@ -34,6 +34,14 @@ const REGEX_CONFIG = {
     // Repeatable sequences for (aa+bb)* part (can be any length)
     REPEATABLE_SEQUENCES: ['aa', 'bb'],
     
+    // ⭐ STAR (*) CONFIGURATION - Easy to modify!
+    // Set to true/false to enable/disable each star operator
+    STAR_CONFIG: {
+        ALPHABET_STAR: true,        // (a+b)* vs (a+b)
+        REPEATABLE_STAR: true,      // (aa+bb)* vs (aa+bb)
+        PATTERN_STAR: false          // [pattern]* vs pattern (whole regex repetition)
+    },
+    
     // Minimum pattern length (shortest required + shortest alternative)
     MIN_PATTERN_LENGTH: 3
 };
@@ -82,10 +90,18 @@ const matchesAnyOption = (str, pos, options) => {
 // ===================================================================
 
 /**
- * PATTERN PART 1: (a+b)* - Zero or more alphabet characters
- * Uses: String.substring() + Array.every() for validation
+ * PATTERN PART 1: (a+b)* OR (a+b) - Alphabet characters (with or without star)
+ * Uses: STAR_CONFIG.ALPHABET_STAR to determine if star is enabled
  */
 const canMatchAlphabetStar = (str, start, length) => {
+    if (!REGEX_CONFIG.STAR_CONFIG.ALPHABET_STAR) {
+        // No star: must match exactly one alphabet character
+        if (length !== 1) return false;
+        const char = getSubstring(str, start, start + 1);
+        return isValidAlphabetChar(char);
+    }
+    
+    // With star: zero or more alphabet characters (original logic)
     if (length === 0) return true; // Zero repetitions allowed
     
     const substring = getSubstring(str, start, start + length);
@@ -95,11 +111,16 @@ const canMatchAlphabetStar = (str, start, length) => {
 
 /**
  * PATTERN PART 2: aa - Exact required sequence(s)
- * Uses: Array.find() to match any of the required sequences (sorted by length, longest first)
+ * Uses: Flexible handling for both string and array formats
  */
 const canMatchRequiredSequence = (str, pos) => {
+    // Handle both single string and array formats
+    const requiredSequences = Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) 
+        ? REGEX_CONFIG.REQUIRED_SEQUENCE 
+        : [REGEX_CONFIG.REQUIRED_SEQUENCE];
+    
     // Sort required sequences by length (longest first) to ensure greedy matching
-    const sortedRequired = [...REGEX_CONFIG.REQUIRED_SEQUENCE].sort((a, b) => b.length - a.length);
+    const sortedRequired = [...requiredSequences].sort((a, b) => b.length - a.length);
     
     // Using Array.find() - returns first sequence that matches (now longest first)
     const matchedSequence = sortedRequired.find(sequence => {
@@ -128,8 +149,8 @@ const canMatchAlternatives = (str, pos) => {
 };
 
 /**
- * PATTERN PART 4: (aa+bb)* - Zero or more repeatable sequences
- * Uses: while loop with longest-first matching for any length sequences
+ * PATTERN PART 4: (aa+bb)* OR (aa+bb) - Repeatable sequences (with or without star)
+ * Uses: STAR_CONFIG.REPEATABLE_STAR to determine if star is enabled
  */
 const canMatchRepeatableSequences = (str, start, end) => {
     let pos = start;
@@ -137,6 +158,18 @@ const canMatchRepeatableSequences = (str, start, end) => {
     // Sort sequences by length (longest first) to ensure greedy matching
     const sortedSequences = [...REGEX_CONFIG.REPEATABLE_SEQUENCES].sort((a, b) => b.length - a.length);
     
+    if (!REGEX_CONFIG.STAR_CONFIG.REPEATABLE_STAR) {
+        // No star: must match exactly one sequence
+        const matchedSequence = sortedSequences.find(sequence => {
+            if (pos + sequence.length !== end) return false; // Must use entire remaining string
+            const substring = getSubstring(str, pos, pos + sequence.length);
+            return substring === sequence;
+        });
+        
+        return matchedSequence !== undefined;
+    }
+    
+    // With star: zero or more sequences (original logic)
     while (pos < end) {
         // Find the first (longest) sequence that matches at current position
         const matchedSequence = sortedSequences.find(sequence => {
@@ -184,8 +217,11 @@ const canMatchSinglePatternExactly = (str, start, end) => {
         currentPos += alphabetLength;
         
         // Step 2: Try required sequence (aa)
-        const requiredPart = str.substring(currentPos, currentPos + Math.max(...REGEX_CONFIG.REQUIRED_SEQUENCE.map(seq => seq.length)));
-        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(REGEX_CONFIG.REQUIRED_SEQUENCE)}: checking from "${str.substring(currentPos)}"`);
+        const requiredSequences = Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) 
+            ? REGEX_CONFIG.REQUIRED_SEQUENCE 
+            : [REGEX_CONFIG.REQUIRED_SEQUENCE];
+        const requiredPart = str.substring(currentPos, currentPos + Math.max(...requiredSequences.map(seq => seq.length)));
+        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(requiredSequences)}: checking from "${str.substring(currentPos)}"`);
         const afterRequired = canMatchRequiredSequence(str, currentPos);
         if (afterRequired === -1) {
             console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequence found`);
@@ -233,13 +269,21 @@ const matchPatternsRecursively = (str, startPos = 0) => {
 
 /**
  * Main pattern matching function - entry point
- * Uses input validation + recursive matching
+ * Uses: STAR_CONFIG.PATTERN_STAR to determine if whole pattern can repeat
  */
 const matchPattern = (inputStr) => {
-    // Handle edge cases using logical operators
-    if (!inputStr || inputStr.length === 0) return true; // Empty string valid
+    // Handle invalid characters first
     if (!validateInput(inputStr)) return false; // Invalid characters
     
+    if (!REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR) {
+        // No star: must match exactly one complete pattern (no repetition)
+        // Empty string is NOT valid when no star (need exactly 1 pattern)
+        if (!inputStr || inputStr.length === 0) return false;
+        return canMatchSinglePatternExactly(inputStr, 0, inputStr.length);
+    }
+    
+    // With star: zero or more patterns (empty string valid)
+    if (!inputStr || inputStr.length === 0) return true; // Empty string valid with star
     return matchPatternsRecursively(inputStr);
 };
 
@@ -404,15 +448,18 @@ const debugCanMatchSinglePatternExactly = (str, start, end, depth) => {
         currentPos += alphabetLength;
         
         // Step 2: Required sequence
-        const requiredPart = str.substring(currentPos, currentPos + Math.max(...REGEX_CONFIG.REQUIRED_SEQUENCE.map(seq => seq.length)));
-        console.log(`${indent}  2️⃣ Required sequences ${JSON.stringify(REGEX_CONFIG.REQUIRED_SEQUENCE)}: checking from "${str.substring(currentPos)}"`);
+        const requiredSequences = Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) 
+            ? REGEX_CONFIG.REQUIRED_SEQUENCE 
+            : [REGEX_CONFIG.REQUIRED_SEQUENCE];
+        const requiredPart = str.substring(currentPos, currentPos + Math.max(...requiredSequences.map(seq => seq.length)));
+        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(requiredSequences)}: checking from "${str.substring(currentPos)}"`);
         const afterRequired = canMatchRequiredSequence(str, currentPos);
         if (afterRequired === -1) {
-            console.log(`${indent}     ❌ No required sequence found`);
+            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequence found`);
             continue;
         }
         const requiredMatched = str.substring(currentPos, afterRequired);
-        console.log(`${indent}     ✅ Matched required sequence: "${requiredMatched}"`);
+        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Matched required sequence: "${requiredMatched}"`);
         currentPos = afterRequired;
         
         // Step 3: Alternatives
@@ -492,5 +539,50 @@ console.log('Position 2 in "aaba":', '"aaba".substring(2, 4) =', "aaba".substrin
 console.log('Does "ba" match alternatives?', REGEX_CONFIG.ALTERNATIVE_OPTIONS.includes("ba"));
 console.log('All alternatives:', REGEX_CONFIG.ALTERNATIVE_OPTIONS);
 
+// Quick test for PATTERN_STAR configuration
+console.log('\n🔧 Testing PATTERN_STAR Configuration:');
+console.log('Current PATTERN_STAR:', REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR);
+
+// Test with current configuration
+console.log('With PATTERN_STAR =', REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR + ':');
+console.log('  Empty string "":', matchPattern(""));
+console.log('  Single pattern "aab":', matchPattern("aab"));
+console.log('  Two patterns "aabaab":', matchPattern("aabaab"));
+
+// Temporarily test with PATTERN_STAR = false
+const originalPatternStar = REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR;
+REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR = false;
+
+console.log('\nWith PATTERN_STAR = false:');
+console.log('  Empty string "":', matchPattern(""));
+console.log('  Single pattern "aab":', matchPattern("aab"));
+console.log('  Two patterns "aabaab":', matchPattern("aabaab"));
+
+// Restore original configuration
+REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR = originalPatternStar;
+console.log('\n✅ Configuration restored to original settings\n');
+
 // Uncomment the line below to run tests automatically
 // runTestSuite();
+
+// Quick test for REQUIRED_SEQUENCE formats
+console.log('\n🔧 Testing REQUIRED_SEQUENCE Format Flexibility:');
+console.log('Current format:', typeof REGEX_CONFIG.REQUIRED_SEQUENCE === 'string' ? 'string' : 'array');
+console.log('Current value:', REGEX_CONFIG.REQUIRED_SEQUENCE);
+
+// Test with current configuration
+console.log('\nTesting "aab" with current format:');
+console.log('Result:', matchPattern("aab"));
+
+// Temporarily test with string format
+const originalRequired = REGEX_CONFIG.REQUIRED_SEQUENCE;
+REGEX_CONFIG.REQUIRED_SEQUENCE = 'aa';  // Single string
+
+console.log('\nWith REQUIRED_SEQUENCE as string "aa":');
+console.log('Format:', typeof REGEX_CONFIG.REQUIRED_SEQUENCE === 'string' ? 'string' : 'array');
+console.log('Value:', REGEX_CONFIG.REQUIRED_SEQUENCE);
+console.log('Testing "aab":', matchPattern("aab"));
+
+// Restore original configuration
+REGEX_CONFIG.REQUIRED_SEQUENCE = originalRequired;
+console.log('\n✅ Configuration restored to original format\n');
