@@ -53,16 +53,26 @@ const REGEX_CONFIG = {
 /**
  * Check if character is in allowed alphabet using Array.includes()
  * Built-in: Array.includes() - cleaner than manual loop
+ * Handles empty alphabet arrays gracefully
  */
 const isValidAlphabetChar = (char) => {
+    // If alphabet is empty, no characters are valid
+    if (!REGEX_CONFIG.ALPHABET || REGEX_CONFIG.ALPHABET.length === 0) {
+        return false;
+    }
     return REGEX_CONFIG.ALPHABET.includes(char);
 };
 
 /**
  * Validate entire string contains only allowed characters using Array.every()
  * Built-in: String.split() + Array.every() - functional approach
+ * Handles empty alphabet arrays gracefully
  */
 const validateInput = (str) => {
+    // If alphabet is empty, only empty strings are valid
+    if (!REGEX_CONFIG.ALPHABET || REGEX_CONFIG.ALPHABET.length === 0) {
+        return str.length === 0;
+    }
     return str.split('').every(char => isValidAlphabetChar(char));
 };
 
@@ -112,12 +122,18 @@ const canMatchAlphabetStar = (str, start, length) => {
 /**
  * PATTERN PART 2: aa - Exact required sequence(s)
  * Uses: Flexible handling for both string and array formats
+ * Handles empty arrays gracefully
  */
 const canMatchRequiredSequence = (str, pos) => {
     // Handle both single string and array formats
     const requiredSequences = Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) 
         ? REGEX_CONFIG.REQUIRED_SEQUENCE 
         : [REGEX_CONFIG.REQUIRED_SEQUENCE];
+    
+    // If no required sequences, return current position (no consumption)
+    if (!requiredSequences || requiredSequences.length === 0) {
+        return pos; // No sequence required, continue from same position
+    }
     
     // Sort required sequences by length (longest first) to ensure greedy matching
     const sortedRequired = [...requiredSequences].sort((a, b) => b.length - a.length);
@@ -134,8 +150,14 @@ const canMatchRequiredSequence = (str, pos) => {
 /**
  * PATTERN PART 3: (b+ab) - One of the alternative options
  * Uses: Array.find() to get first matching option (sorted by length, longest first)
+ * Handles empty arrays gracefully
  */
 const canMatchAlternatives = (str, pos) => {
+    // If no alternatives, return current position (no consumption)
+    if (!REGEX_CONFIG.ALTERNATIVE_OPTIONS || REGEX_CONFIG.ALTERNATIVE_OPTIONS.length === 0) {
+        return pos; // No alternative required, continue from same position
+    }
+    
     // Sort alternatives by length (longest first) to ensure greedy matching
     const sortedAlternatives = [...REGEX_CONFIG.ALTERNATIVE_OPTIONS].sort((a, b) => b.length - a.length);
     
@@ -151,9 +173,16 @@ const canMatchAlternatives = (str, pos) => {
 /**
  * PATTERN PART 4: (aa+bb)* OR (aa+bb) - Repeatable sequences (with or without star)
  * Uses: STAR_CONFIG.REPEATABLE_STAR to determine if star is enabled
+ * Handles empty arrays gracefully
  */
 const canMatchRepeatableSequences = (str, start, end) => {
     let pos = start;
+    
+    // If no repeatable sequences defined, check if remaining string is empty
+    if (!REGEX_CONFIG.REPEATABLE_SEQUENCES || REGEX_CONFIG.REPEATABLE_SEQUENCES.length === 0) {
+        // With empty sequences, only empty remaining string is valid
+        return pos === end;
+    }
     
     // Sort sequences by length (longest first) to ensure greedy matching
     const sortedSequences = [...REGEX_CONFIG.REPEATABLE_SEQUENCES].sort((a, b) => b.length - a.length);
@@ -220,8 +249,15 @@ const canMatchSinglePatternExactly = (str, start, end) => {
         const requiredSequences = Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) 
             ? REGEX_CONFIG.REQUIRED_SEQUENCE 
             : [REGEX_CONFIG.REQUIRED_SEQUENCE];
-        const requiredPart = str.substring(currentPos, currentPos + Math.max(...requiredSequences.map(seq => seq.length)));
-        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(requiredSequences)}: checking from "${str.substring(currentPos)}"`);
+        
+        // Handle empty required sequences
+        if (!requiredSequences || requiredSequences.length === 0) {
+            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequences configured`);
+        } else {
+            const requiredPart = str.substring(currentPos, currentPos + Math.max(...requiredSequences.map(seq => seq.length)));
+            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(requiredSequences)}: checking from "${str.substring(currentPos)}"`);
+        }
+        
         const afterRequired = canMatchRequiredSequence(str, currentPos);
         if (afterRequired === -1) {
             console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequence found`);
@@ -451,8 +487,15 @@ const debugCanMatchSinglePatternExactly = (str, start, end, depth) => {
         const requiredSequences = Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) 
             ? REGEX_CONFIG.REQUIRED_SEQUENCE 
             : [REGEX_CONFIG.REQUIRED_SEQUENCE];
-        const requiredPart = str.substring(currentPos, currentPos + Math.max(...requiredSequences.map(seq => seq.length)));
-        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(requiredSequences)}: checking from "${str.substring(currentPos)}"`);
+        
+        // Handle empty required sequences
+        if (!requiredSequences || requiredSequences.length === 0) {
+            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequences configured`);
+        } else {
+            const requiredPart = str.substring(currentPos, currentPos + Math.max(...requiredSequences.map(seq => seq.length)));
+            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(requiredSequences)}: checking from "${str.substring(currentPos)}"`);
+        }
+        
         const afterRequired = canMatchRequiredSequence(str, currentPos);
         if (afterRequired === -1) {
             console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequence found`);
@@ -586,3 +629,58 @@ console.log('Testing "aab":', matchPattern("aab"));
 // Restore original configuration
 REGEX_CONFIG.REQUIRED_SEQUENCE = originalRequired;
 console.log('\n✅ Configuration restored to original format\n');
+
+// Comprehensive test for empty array configurations
+console.log('\n🔧 Testing Empty Array Configurations:');
+
+// Store original configuration
+const originalConfig = {
+    ALPHABET: [...REGEX_CONFIG.ALPHABET],
+    REQUIRED_SEQUENCE: Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) ? [...REGEX_CONFIG.REQUIRED_SEQUENCE] : REGEX_CONFIG.REQUIRED_SEQUENCE,
+    ALTERNATIVE_OPTIONS: [...REGEX_CONFIG.ALTERNATIVE_OPTIONS],
+    REPEATABLE_SEQUENCES: [...REGEX_CONFIG.REPEATABLE_SEQUENCES]
+};
+
+// Test 1: Empty ALPHABET
+console.log('\n1️⃣ Testing ALPHABET = []:');
+REGEX_CONFIG.ALPHABET = [];
+console.log('  Empty string "":', matchPattern(""));
+console.log('  Non-empty string "a":', matchPattern("a"));
+
+// Test 2: Empty REQUIRED_SEQUENCE  
+console.log('\n2️⃣ Testing REQUIRED_SEQUENCE = []:');
+REGEX_CONFIG.ALPHABET = ['a', 'b']; // Restore alphabet
+REGEX_CONFIG.REQUIRED_SEQUENCE = [];
+console.log('  String "ab":', matchPattern("ab"));
+console.log('  String "ba":', matchPattern("ba"));
+
+// Test 3: Empty ALTERNATIVE_OPTIONS
+console.log('\n3️⃣ Testing ALTERNATIVE_OPTIONS = []:');
+REGEX_CONFIG.REQUIRED_SEQUENCE = ['aa']; // Restore required
+REGEX_CONFIG.ALTERNATIVE_OPTIONS = [];
+console.log('  String "aa":', matchPattern("aa"));
+console.log('  String "aab":', matchPattern("aab"));
+
+// Test 4: Empty REPEATABLE_SEQUENCES
+console.log('\n4️⃣ Testing REPEATABLE_SEQUENCES = []:');
+REGEX_CONFIG.ALTERNATIVE_OPTIONS = ['b']; // Restore alternatives
+REGEX_CONFIG.REPEATABLE_SEQUENCES = [];
+console.log('  String "aab":', matchPattern("aab"));
+console.log('  String "aabaa":', matchPattern("aabaa"));
+
+// Test 5: All arrays empty (extreme case)
+console.log('\n5️⃣ Testing ALL arrays empty:');
+REGEX_CONFIG.ALPHABET = [];
+REGEX_CONFIG.REQUIRED_SEQUENCE = [];
+REGEX_CONFIG.ALTERNATIVE_OPTIONS = [];
+REGEX_CONFIG.REPEATABLE_SEQUENCES = [];
+console.log('  Empty string "":', matchPattern(""));
+console.log('  Any string "test":', matchPattern("test"));
+
+// Restore original configuration
+console.log('\n✅ Restoring original configuration...');
+REGEX_CONFIG.ALPHABET = originalConfig.ALPHABET;
+REGEX_CONFIG.REQUIRED_SEQUENCE = originalConfig.REQUIRED_SEQUENCE;
+REGEX_CONFIG.ALTERNATIVE_OPTIONS = originalConfig.ALTERNATIVE_OPTIONS;
+REGEX_CONFIG.REPEATABLE_SEQUENCES = originalConfig.REPEATABLE_SEQUENCES;
+console.log('✅ All configurations restored!\n');
