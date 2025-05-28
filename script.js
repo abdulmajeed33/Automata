@@ -39,11 +39,44 @@ const REGEX_CONFIG = {
     STAR_CONFIG: {
         ALPHABET_STAR: true,        // (a+b)* vs (a+b)
         REPEATABLE_STAR: true,      // (aa+bb)* vs (aa+bb)
-        PATTERN_STAR: false          // [pattern]* vs pattern (whole regex repetition)
-    },
+        PATTERN_STAR: true          // [pattern]* vs pattern (whole regex repetition)
+    }
+};
+
+/**
+ * Calculate minimum pattern length dynamically based on star configuration
+ */
+const getMinPatternLength = () => {
+    let minLength = 0;
     
-    // Minimum pattern length (shortest required + shortest alternative)
-    MIN_PATTERN_LENGTH: 3
+    // Alphabet part: (a+b)* vs (a+b)
+    if (!REGEX_CONFIG.STAR_CONFIG.ALPHABET_STAR) {
+        minLength += 1; // Must have exactly 1 alphabet character
+    }
+    // If ALPHABET_STAR=true, alphabet part can be 0, so no minimum
+    
+    // Required sequence part: always required (no star on this part)
+    const requiredSequences = Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) 
+        ? REGEX_CONFIG.REQUIRED_SEQUENCE 
+        : [REGEX_CONFIG.REQUIRED_SEQUENCE];
+    if (requiredSequences && requiredSequences.length > 0) {
+        minLength += Math.min(...requiredSequences.map(seq => seq.length));
+    }
+    
+    // Alternative part: always required (no star on this part)
+    if (REGEX_CONFIG.ALTERNATIVE_OPTIONS && REGEX_CONFIG.ALTERNATIVE_OPTIONS.length > 0) {
+        minLength += Math.min(...REGEX_CONFIG.ALTERNATIVE_OPTIONS.map(opt => opt.length));
+    }
+    
+    // Repeatable part: (aa+bb)* vs (aa+bb)
+    if (!REGEX_CONFIG.STAR_CONFIG.REPEATABLE_STAR) {
+        if (REGEX_CONFIG.REPEATABLE_SEQUENCES && REGEX_CONFIG.REPEATABLE_SEQUENCES.length > 0) {
+            minLength += Math.min(...REGEX_CONFIG.REPEATABLE_SEQUENCES.map(seq => seq.length));
+        }
+    }
+    // If REPEATABLE_STAR=true, repeatable part can be 0, so no minimum
+    
+    return Math.max(minLength, 1); // At least 1 character for any valid pattern
 };
 
 // ===================================================================
@@ -227,47 +260,39 @@ const canMatchRepeatableSequences = (str, start, end) => {
  */
 const canMatchSinglePatternExactly = (str, start, end) => {
     const patternLength = end - start;
-    const minLength = REGEX_CONFIG.MIN_PATTERN_LENGTH;
+    const minLength = getMinPatternLength();
     
     if (patternLength < minLength) return false;
     
-    const maxAlphabetLength = patternLength - minLength;
+    // Calculate alphabet length range based on star configuration
+    let alphabetLengthRange;
     
-    // Try different lengths for (a+b)* part using Array.from() for range
-    const alphabetLengths = Array.from({length: maxAlphabetLength + 1}, (_, i) => i);
+    if (!REGEX_CONFIG.STAR_CONFIG.ALPHABET_STAR) {
+        // No star: exactly 1 alphabet character required
+        alphabetLengthRange = [1];
+    } else {
+        // With star: 0 to (pattern_length - min_other_parts)
+        const minOtherParts = minLength - (REGEX_CONFIG.STAR_CONFIG.ALPHABET_STAR ? 0 : 1);
+        const maxAlphabetLength = Math.max(0, patternLength - minOtherParts);
+        alphabetLengthRange = Array.from({length: maxAlphabetLength + 1}, (_, i) => i);
+    }
     
-    return alphabetLengths.some(alphabetLength => {
+    // Try different lengths for alphabet part
+    return alphabetLengthRange.some(alphabetLength => {
         let currentPos = start;
         
-        // Step 1: Try (a+b)* with current length
+        // Step 1: Try alphabet part with current length
         if (!canMatchAlphabetStar(str, currentPos, alphabetLength)) {
             return false;
         }
         currentPos += alphabetLength;
         
-        // Step 2: Try required sequence (aa)
-        const requiredSequences = Array.isArray(REGEX_CONFIG.REQUIRED_SEQUENCE) 
-            ? REGEX_CONFIG.REQUIRED_SEQUENCE 
-            : [REGEX_CONFIG.REQUIRED_SEQUENCE];
-        
-        // Handle empty required sequences
-        if (!requiredSequences || requiredSequences.length === 0) {
-            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequences configured`);
-        } else {
-            const requiredPart = str.substring(currentPos, currentPos + Math.max(...requiredSequences.map(seq => seq.length)));
-            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Required sequences ${JSON.stringify(requiredSequences)}: checking from "${str.substring(currentPos)}"`);
-        }
-        
+        // Step 2: Try required sequence
         const afterRequired = canMatchRequiredSequence(str, currentPos);
-        if (afterRequired === -1) {
-            console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - No required sequence found`);
-            return false;
-        }
-        const requiredMatched = str.substring(currentPos, afterRequired);
-        console.log(`🧩 Analyzing pattern "${str.substring(currentPos)}" - Matched required sequence: "${requiredMatched}"`);
+        if (afterRequired === -1) return false;
         currentPos = afterRequired;
         
-        // Step 3: Try alternatives (b+ab)
+        // Step 3: Try alternatives
         const afterAlternatives = canMatchAlternatives(str, currentPos);
         if (afterAlternatives === -1) return false;
         currentPos = afterAlternatives;
@@ -285,7 +310,7 @@ const matchPatternsRecursively = (str, startPos = 0) => {
     // Base case: reached end of string
     if (startPos >= str.length) return true;
     
-    const minPatternLength = REGEX_CONFIG.MIN_PATTERN_LENGTH;
+    const minPatternLength = getMinPatternLength();
     const possibleEndPositions = Array.from(
         {length: str.length - startPos - minPatternLength + 1}, 
         (_, i) => startPos + minPatternLength + i
@@ -426,7 +451,7 @@ const debugMatchPatternsRecursively = (str, startPos, depth) => {
         return true;
     }
     
-    const minPatternLength = REGEX_CONFIG.MIN_PATTERN_LENGTH;
+    const minPatternLength = getMinPatternLength();
     const possibleEndPositions = Array.from(
         {length: str.length - startPos - minPatternLength + 1}, 
         (_, i) => startPos + minPatternLength + i
@@ -456,7 +481,7 @@ const debugMatchPatternsRecursively = (str, startPos, depth) => {
 const debugCanMatchSinglePatternExactly = (str, start, end, depth) => {
     const indent = '  '.repeat(depth);
     const patternLength = end - start;
-    const minLength = REGEX_CONFIG.MIN_PATTERN_LENGTH;
+    const minLength = getMinPatternLength();
     const substring = str.substring(start, end);
     
     console.log(`${indent}🧩 Analyzing pattern "${substring}"`);
@@ -684,3 +709,62 @@ REGEX_CONFIG.REQUIRED_SEQUENCE = originalConfig.REQUIRED_SEQUENCE;
 REGEX_CONFIG.ALTERNATIVE_OPTIONS = originalConfig.ALTERNATIVE_OPTIONS;
 REGEX_CONFIG.REPEATABLE_SEQUENCES = originalConfig.REPEATABLE_SEQUENCES;
 console.log('✅ All configurations restored!\n');
+
+// Comprehensive STAR_CONFIG testing - replace all previous tests
+console.log('\n🌟 COMPREHENSIVE STAR_CONFIG TESTING 🌟');
+
+// Store original configuration
+const originalStarConfig = {
+    ALPHABET_STAR: REGEX_CONFIG.STAR_CONFIG.ALPHABET_STAR,
+    REPEATABLE_STAR: REGEX_CONFIG.STAR_CONFIG.REPEATABLE_STAR,
+    PATTERN_STAR: REGEX_CONFIG.STAR_CONFIG.PATTERN_STAR
+};
+
+// Test all 8 combinations of star configurations
+const starConfigurations = [
+    { ALPHABET_STAR: true,  REPEATABLE_STAR: true,  PATTERN_STAR: true  },
+    { ALPHABET_STAR: true,  REPEATABLE_STAR: true,  PATTERN_STAR: false },
+    { ALPHABET_STAR: true,  REPEATABLE_STAR: false, PATTERN_STAR: true  },
+    { ALPHABET_STAR: true,  REPEATABLE_STAR: false, PATTERN_STAR: false },
+    { ALPHABET_STAR: false, REPEATABLE_STAR: true,  PATTERN_STAR: true  },
+    { ALPHABET_STAR: false, REPEATABLE_STAR: true,  PATTERN_STAR: false },
+    { ALPHABET_STAR: false, REPEATABLE_STAR: false, PATTERN_STAR: true  },
+    { ALPHABET_STAR: false, REPEATABLE_STAR: false, PATTERN_STAR: false }
+];
+
+starConfigurations.forEach((config, index) => {
+    console.log(`\n${index + 1}️⃣ Testing Configuration:`, config);
+    
+    // Apply configuration
+    REGEX_CONFIG.STAR_CONFIG = { ...config };
+    
+    // Calculate and show dynamic minimum length
+    const minLen = getMinPatternLength();
+    console.log(`   📏 Dynamic min length: ${minLen}`);
+    
+    // Show what the pattern looks like
+    const alphabetPart = config.ALPHABET_STAR ? '(a+b)*' : '(a+b)';
+    const repeatablePart = config.REPEATABLE_STAR ? '(aa+bb)*' : '(aa+bb)';
+    const patternPart = config.PATTERN_STAR ? '[pattern]*' : 'pattern';
+    console.log(`   📝 Pattern: ${patternPart.replace('pattern', `${alphabetPart}aa(b+ab)${repeatablePart}`)}`);
+    
+    // Test key cases
+    const testCases = [
+        { input: '', desc: 'empty string' },
+        { input: 'aab', desc: 'basic pattern' },
+        { input: 'ab', desc: 'missing aa' },
+        { input: 'aabaab', desc: 'two patterns' },
+        { input: 'baabaa', desc: 'with alphabet+repeatable' }
+    ];
+    
+    testCases.forEach(test => {
+        const result = matchPattern(test.input);
+        const inputDisplay = test.input || '(empty)';
+        console.log(`   "${inputDisplay}" → ${result} (${test.desc})`);
+    });
+});
+
+// Restore original configuration
+console.log('\n✅ Restoring original STAR_CONFIG...');
+REGEX_CONFIG.STAR_CONFIG = originalStarConfig;
+console.log('✅ STAR_CONFIG testing complete!\n');
