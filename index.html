@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regular Expression Checker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Regular Expression Checker</h1>
+        <div class="regex-display">
+            <h2>Current Regular Expression:</h2>
+            <code>[(a+b)*aa(b+ab)(aa+bb)*]*</code>
+        </div>
+        
+        <div class="input-section">
+            <label for="testString">Enter test string:</label>
+            <input type="text" id="testString" placeholder="Enter string (only 'a' and 'b' allowed)" autocomplete="off">
+            <button onclick="checkString()">Check String</button>
+        </div>
+        
+        <div class="result-section">
+            <div id="result" class="result-message"></div>
+        </div>
+        
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ul>
+                <li>Enter a string containing only 'a' and 'b' characters</li>
+                <li>Click "Check String" to see if it matches the regular expression</li>
+                <li>The regex pattern can be easily modified in the JavaScript code</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html> 
